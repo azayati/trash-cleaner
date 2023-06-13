@@ -4,7 +4,7 @@
   <parent>
     <artifactId>addons-parent-pom</artifactId>
     <groupId>org.exoplatform.addons</groupId>
-    <version>17-exo-M01</version>
+    <version>10</version>
   </parent>
   <groupId>org.exoplatform.addons.trash-cleaner</groupId>
   <artifactId>trash-cleaner-extension</artifactId>
@@ -28,7 +28,7 @@
       <dependency>
         <groupId>org.exoplatform.social</groupId>
         <artifactId>social</artifactId>
-        <version>6.5.x-exo-SNAPSHOT</version>
+        <version>5.2.3</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -36,14 +36,14 @@
       <dependency>
         <groupId>org.exoplatform.jcr</groupId>
         <artifactId>jcr-parent</artifactId>
-        <version>6.5.x-SNAPSHOT</version>
+        <version>5.2.3</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>org.exoplatform.ecms</groupId>
         <artifactId>ecms</artifactId>
-        <version>6.5.x-SNAPSHOT</version>
+        <version>5.2.3</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

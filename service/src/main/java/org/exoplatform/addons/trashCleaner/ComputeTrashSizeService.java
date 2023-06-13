@@ -1,15 +1,12 @@
 package org.exoplatform.addons.trashCleaner;
 
-import org.exoplatform.container.ExoContainerContext;
-import org.exoplatform.services.cms.documents.TrashService;
-import org.exoplatform.services.jcr.RepositoryService;
-import org.exoplatform.services.jcr.core.ManageableRepository;
-import org.exoplatform.services.jcr.ext.app.SessionProviderService;
-import org.exoplatform.services.rest.resource.ResourceContainer;
-import org.exoplatform.services.log.ExoLogger;
-import org.exoplatform.services.log.Log;
-import org.quartz.JobExecutionContext;
-import org.quartz.JobExecutionException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.annotation.security.RolesAllowed;
 import javax.jcr.Node;
@@ -21,10 +18,15 @@ import javax.jcr.version.VersionIterator;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
-import java.text.CharacterIterator;
-import java.text.StringCharacterIterator;
-import java.util.ArrayList;
-import java.util.List;
+
+import org.exoplatform.container.ExoContainerContext;
+import org.exoplatform.services.cms.documents.TrashService;
+import org.exoplatform.services.jcr.RepositoryService;
+import org.exoplatform.services.jcr.core.ManageableRepository;
+import org.exoplatform.services.jcr.ext.app.SessionProviderService;
+import org.exoplatform.services.log.ExoLogger;
+import org.exoplatform.services.log.Log;
+import org.exoplatform.services.rest.resource.ResourceContainer;
 
 @Path("computeTrashSize")
 public class ComputeTrashSizeService implements ResourceContainer {
@@ -143,10 +145,21 @@ public class ComputeTrashSizeService implements ResourceContainer {
 
   public int getContentSize(Node content) throws RepositoryException {
     try {
-      return content.getProperty("jcr:data").getValue().getStream().readAllBytes().length;
+      InputStream contentInputStream = content.getProperty("jcr:data").getValue().getStream();
+      return readAllBytes(contentInputStream).length;
     } catch (Exception e) {
       LOG.error("Unable to compute size for node {}", content.getPath());
       return 0;
     }
+  }
+  
+  private static byte[] readAllBytes(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[4096];
+    int bytesRead;
+    while ((bytesRead = inputStream.read(buffer)) != -1) {
+        outputStream.write(buffer, 0, bytesRead);
+    }
+    return outputStream.toByteArray();
   }
 }

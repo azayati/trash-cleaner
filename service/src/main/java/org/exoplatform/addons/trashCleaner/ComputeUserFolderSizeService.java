@@ -1,5 +1,8 @@
 package org.exoplatform.addons.trashCleaner;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.time.Instant;
@@ -26,8 +29,6 @@ import org.exoplatform.services.organization.User;
 import org.exoplatform.services.organization.UserStatus;
 import org.exoplatform.services.rest.resource.ResourceContainer;
 
-import io.swagger.v3.oas.annotations.Parameter;
-
 @Path("computeUserFolderSize")
 public class ComputeUserFolderSizeService implements ResourceContainer {
   private static final Log LOG = ExoLogger.getLogger(ComputeUserFolderSizeService.class);
@@ -44,7 +45,7 @@ public class ComputeUserFolderSizeService implements ResourceContainer {
 
   @GET
   @RolesAllowed("administrators")
-  public Response computeUserFolderSizeSize(@Parameter(description = "Check for user not connected since this date (format timestamp in ms)") @QueryParam("date") String date) {
+  public Response computeUserFolderSizeSize(@QueryParam("date") String date) {
     Instant limitDate = Instant.now();
     if (date == null || date.equals("")) {
       limitDate = limitDate.minus(365*2, ChronoUnit.DAYS);
@@ -163,7 +164,8 @@ public class ComputeUserFolderSizeService implements ResourceContainer {
 
   public int getContentSize(Node content) throws RepositoryException {
     try {
-      return content.getProperty("jcr:data").getValue().getStream().readAllBytes().length;
+      InputStream contentInputStream = content.getProperty("jcr:data").getValue().getStream();
+      return readAllBytes(contentInputStream).length;
     } catch (Exception e) {
       LOG.error("Unable to compute size for node {}", content.getPath());
       return 0;
@@ -183,5 +185,15 @@ public class ComputeUserFolderSizeService implements ResourceContainer {
     }
     value *= Long.signum(bytes);
     return String.format("%.1f %ciB", value / 1024.0, ci.current());
+  }
+  
+  private static byte[] readAllBytes(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[4096];
+    int bytesRead;
+    while ((bytesRead = inputStream.read(buffer)) != -1) {
+        outputStream.write(buffer, 0, bytesRead);
+    }
+    return outputStream.toByteArray();
   }
 }
