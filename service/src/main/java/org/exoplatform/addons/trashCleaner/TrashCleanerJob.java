@@ -3,6 +3,7 @@ package org.exoplatform.addons.trashCleaner;
 import org.exoplatform.container.ExoContainerContext;
 import org.exoplatform.services.cms.actions.ActionServiceContainer;
 import org.exoplatform.services.cms.documents.TrashService;
+import org.exoplatform.services.cms.link.LinkManager;
 import org.exoplatform.services.cms.relations.RelationsService;
 import org.exoplatform.services.cms.thumbnail.ThumbnailService;
 import org.exoplatform.services.jcr.RepositoryService;
@@ -10,11 +11,14 @@ import org.exoplatform.services.jcr.RepositoryService;
 import org.exoplatform.ecm.webui.utils.Utils;
 import org.exoplatform.ecm.webui.utils.PermissionUtil;
 import org.exoplatform.services.jcr.core.ManageableRepository;
+import org.exoplatform.services.jcr.ext.app.SessionProviderService;
 import org.exoplatform.services.jcr.ext.common.SessionProvider;
 import org.exoplatform.services.jcr.impl.core.NodeImpl;
 import org.exoplatform.services.jcr.impl.core.SessionImpl;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
+import org.exoplatform.services.wcm.utils.WCMCoreUtils;
+
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -60,10 +64,34 @@ public class TrashCleanerJob implements Job {
           }
           try {
             current++;
+            String currentNodeRestorePath = currentNode.getProperty("exo:restorePath").getString();
+            //Node currentRestoreLocationNode = (Node) session.getItem(currentNodeRestorePath);
+            String nodeInfos = currentNode.getName() + "|" + currentNode.getPrimaryNodeType().getName() + "|"
+                + currentNodeRestorePath;
+            LinkManager linkManager = ExoContainerContext.getCurrentContainer().getComponentInstanceOfType(LinkManager.class);
+            String symlinkOriginalNodeInfos = null;
+            if (currentNode.isNodeType("exo:symlink")) {
+              Node targetNodeOfCurrentRestoreLocationNode = linkManager.getTarget(currentNode, true);
+              symlinkOriginalNodeInfos = targetNodeOfCurrentRestoreLocationNode.getName() + "|"
+                  + targetNodeOfCurrentRestoreLocationNode.getPath()
+                  + (trashService.isInTrash(targetNodeOfCurrentRestoreLocationNode) ? ("|"
+                      + targetNodeOfCurrentRestoreLocationNode.getProperty("exo:restorePath").getString()) : "");
+            }
             if (current % 50 == 0) {
-              LOG.info("Checking node " + currentNode.getName() + " node from Trash (" + current + "/" + size + ")");
+
+              LOG.info("Checking node ****** "
+                  + nodeInfos + " ******" + (symlinkOriginalNodeInfos != null
+                                                                              ? (" and symlink original node ******  "
+                                                                                  + symlinkOriginalNodeInfos + " ******")
+                                                                              : "")
+                  + " from Trash (" + current + "/" + size + ")");
             } else {
-              LOG.debug("Checking node " + currentNode.getName() + " node from Trash (" + current + "/" + size + ")");
+              LOG.info("Checking node ****** "
+                  + nodeInfos + " ******" + (symlinkOriginalNodeInfos != null
+                                                                              ? (" and symlink original node ******  "
+                                                                                  + symlinkOriginalNodeInfos + " ******")
+                                                                              : "")
+                  + " from Trash (" + current + "/" + size + ")");
             }
             if (currentNode.getName().equals("exo:actions") && currentNode.hasNode("trashFolder")) {
               continue;
@@ -86,7 +114,9 @@ public class TrashCleanerJob implements Job {
           }
         }
       }
-    } catch (RepositoryException ex) {
+    } catch (
+
+    RepositoryException ex) {
       LOG.error("Failed to get child nodes", ex);
     }
     LOG.info("Empty Trash folder successfully! " + deletedNode + " nodes deleted");
@@ -110,10 +140,10 @@ public class TrashCleanerJob implements Job {
                                                            .getComponentInstanceOfType(ThumbnailService.class);
     RepositoryService repoService = ExoContainerContext.getCurrentContainer().getComponentInstanceOfType(RepositoryService.class);
     SessionProvider sessionProviderForDeleteNode = SessionProvider.createSystemProvider();
-    Session sessionForDeleteNode =sessionProviderForDeleteNode.getSession("collaboration",repoService.getDefaultRepository());
-    LOG.debug("Try to delete node {}",node.getPath());
+    Session sessionForDeleteNode = sessionProviderForDeleteNode.getSession("collaboration", repoService.getDefaultRepository());
+    LOG.info("Try to delete node {}", node.getPath());
     try {
-      Node nodeToDelete = readNodeWithNewSession(node,sessionForDeleteNode);
+      Node nodeToDelete = readNodeWithNewSession(node, sessionForDeleteNode);
       try {
         removeReferences(nodeToDelete);
       } catch (Exception ex) {
@@ -139,7 +169,7 @@ public class TrashCleanerJob implements Job {
       }
       nodeToDelete.remove();
       nodeToDelete.getSession().save();
-      LOG.debug("Node " + nodeToDelete.getPath() + " deleted");
+      LOG.info("Node " + nodeToDelete.getPath() + " deleted");
     } catch (ReferentialIntegrityException ref) {
       if (!fixReferentialIntegrityException(node)) {
         LOG.error("ReferentialIntegrityException when removing " + node.getName() + " node from Trash", ref);
@@ -216,25 +246,24 @@ public class TrashCleanerJob implements Job {
   }
 
   private Node readNodeWithNewSession(Node node, Session sessionForDeleteNode) throws RepositoryException {
-    String idf = ((NodeImpl)node).getIdentifier();
-    return ((SessionImpl)sessionForDeleteNode).getNodeByIdentifier(idf);
+    String idf = ((NodeImpl) node).getIdentifier();
+    return ((SessionImpl) sessionForDeleteNode).getNodeByIdentifier(idf);
   }
 
   private void removeReferences(Node node) throws Exception {
-    RelationsService relationService =ExoContainerContext.getCurrentContainer()
-                                                         .getComponentInstanceOfType(RelationsService.class);
-
+    RelationsService relationService =
+                                     ExoContainerContext.getCurrentContainer().getComponentInstanceOfType(RelationsService.class);
 
     PropertyIterator iter = node.getReferences();
     if (iter.hasNext()) {
       // if there is a reference, move it
       String relationPath = iter.nextProperty().getPath();
-      LOG.debug("Node " + node.getPath() + " is referenced by " + relationPath + ", remove the referenec");
+      LOG.info("Node " + node.getPath() + " is referenced by " + relationPath + ", remove the referenec");
 
       Item relation = node.getSession().getItem(relationPath);
       Node sourceRelationNode = relation.getParent();
 
-      relationService.removeRelation(sourceRelationNode,node.getPath());
+      relationService.removeRelation(sourceRelationNode, node.getPath());
     }
 
     NodeIterator children = node.getNodes();
