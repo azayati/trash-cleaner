@@ -56,42 +56,25 @@ public class TrashCleanerJob implements Job {
         NodeIterator childNodes = trashNode.getNodes();
         long size = childNodes.getSize();
         int current = 0;
-
+        List<Node> reversedListNodes = new ArrayList<>();
         while (childNodes.hasNext()) {
           Node currentNode = (Node) childNodes.next();
+          reversedListNodes.add(0, currentNode);
+        }
+        for (Node currentNode : reversedListNodes) {
           if (!currentNode.getSession().isLive()) {
             currentNode.getSession().refresh(false);
           }
           try {
             current++;
             String currentNodeRestorePath = currentNode.getProperty("exo:restorePath").getString();
-            //Node currentRestoreLocationNode = (Node) session.getItem(currentNodeRestorePath);
             String nodeInfos = currentNode.getName() + "|" + currentNode.getPrimaryNodeType().getName() + "|"
                 + currentNodeRestorePath;
-            LinkManager linkManager = ExoContainerContext.getCurrentContainer().getComponentInstanceOfType(LinkManager.class);
-            String symlinkOriginalNodeInfos = null;
-            if (currentNode.isNodeType("exo:symlink")) {
-              Node targetNodeOfCurrentRestoreLocationNode = linkManager.getTarget(currentNode, true);
-              symlinkOriginalNodeInfos = targetNodeOfCurrentRestoreLocationNode.getName() + "|"
-                  + targetNodeOfCurrentRestoreLocationNode.getPath()
-                  + (trashService.isInTrash(targetNodeOfCurrentRestoreLocationNode) ? ("|"
-                      + targetNodeOfCurrentRestoreLocationNode.getProperty("exo:restorePath").getString()) : "");
-            }
             if (current % 50 == 0) {
 
-              LOG.info("Checking node ****** "
-                  + nodeInfos + " ******" + (symlinkOriginalNodeInfos != null
-                                                                              ? (" and symlink original node ******  "
-                                                                                  + symlinkOriginalNodeInfos + " ******")
-                                                                              : "")
-                  + " from Trash (" + current + "/" + size + ")");
+              LOG.info("Checking node ****** " + nodeInfos + " ******" + " from Trash (" + current + "/" + size + ")");
             } else {
-              LOG.info("Checking node ****** "
-                  + nodeInfos + " ******" + (symlinkOriginalNodeInfos != null
-                                                                              ? (" and symlink original node ******  "
-                                                                                  + symlinkOriginalNodeInfos + " ******")
-                                                                              : "")
-                  + " from Trash (" + current + "/" + size + ")");
+              LOG.info("Checking node ****** " + nodeInfos + " ******" + " from Trash (" + current + "/" + size + ")");
             }
             if (currentNode.getName().equals("exo:actions") && currentNode.hasNode("trashFolder")) {
               continue;
@@ -114,16 +97,14 @@ public class TrashCleanerJob implements Job {
           }
         }
       }
-    } catch (
-
-    RepositoryException ex) {
+    } catch (RepositoryException ex) {
       LOG.error("Failed to get child nodes", ex);
     }
     LOG.info("Empty Trash folder successfully! " + deletedNode + " nodes deleted");
   }
 
   public void recursiveDelete(Node node) throws Exception {
-    if (node.isNodeType("nt:folder") || node.isNodeType("nt:unstructured")) {
+    if (node.isNodeType("nt:folder") || node.isNodeType("nt:unstructured") || node.isNodeType("exo:symlink")) {
       NodeIterator children = node.getNodes();
       while (children.hasNext()) {
         Node child = children.nextNode();
@@ -173,7 +154,7 @@ public class TrashCleanerJob implements Job {
     } catch (ReferentialIntegrityException ref) {
       if (!fixReferentialIntegrityException(node)) {
         LOG.error("ReferentialIntegrityException when removing " + node.getName() + " node from Trash", ref);
-        //log nothing if the fix success to deleteNode
+        // log nothing if the fix success to deleteNode
       }
     } catch (ConstraintViolationException cons) {
       LOG.error("ConstraintViolationException when removing " + node.getName() + " node from Trash", cons);
@@ -186,34 +167,35 @@ public class TrashCleanerJob implements Job {
   }
 
   private boolean fixReferentialIntegrityException(Node node) {
-    String name="";
+    String name = "";
 
-    //This node have a version in versionHistory,
-    // which is set as liveRevision of another node which was copy pasted from this node
-    //we need to
-    //1) find this node
-    //2) clean his publication
+    // This node have a version in versionHistory,
+    // which is set as liveRevision of another node which was copy pasted from
+    // this node
+    // we need to
+    // 1) find this node
+    // 2) clean his publication
 
     try {
       Session session = node.getSession();
       session.refresh(false);
-      name=node.getName();
+      name = node.getName();
       boolean shouldDeleteNode = false;
 
       String liveRevision = node.getProperty("publication:liveRevision").getValue().getString();
       Node versionHistory = session.getNodeByUUID(liveRevision).getParent();
-      for (NodeIterator it = versionHistory.getNodes(); it.hasNext(); ) {
+      for (NodeIterator it = versionHistory.getNodes(); it.hasNext();) {
         Node child = it.nextNode();
         long nbRef = child.getReferences().getSize();
-        LOG.info("Version history child node {} have {} references",child.getPath(),nbRef);
-        for (PropertyIterator iter = child.getReferences(); iter.hasNext(); ) {
+        LOG.info("Version history child node {} have {} references", child.getPath(), nbRef);
+        for (PropertyIterator iter = child.getReferences(); iter.hasNext();) {
           // if there is a reference, move it
           String relationPath = iter.nextProperty().getPath();
           LOG.info("Node " + child.getPath() + " is referenced by " + relationPath);
           if (!relationPath.startsWith(node.getPath())) {
             Node relation = node.getSession().getItem(relationPath).getParent();
             cleanPublication(relation);
-            shouldDeleteNode=true;
+            shouldDeleteNode = true;
           }
         }
       }
@@ -228,20 +210,19 @@ public class TrashCleanerJob implements Job {
     }
     return false;
 
-
   }
 
   private void cleanPublication(Node relation) {
-    String name="";
+    String name = "";
     try {
       name = relation.getName();
       relation.setProperty("publication:liveRevision", (javax.jcr.Value) null);
       relation.setProperty("publication:currentState", "published");
       relation.save();
 
-      LOG.info("Publication cleaned on node {}, to fix integrity problem.",name);
+      LOG.info("Publication cleaned on node {}, to fix integrity problem.", name);
     } catch (Exception e) {
-      LOG.error("Unable to clean publication for node {}",name,e);
+      LOG.error("Unable to clean publication for node {}", name, e);
     }
   }
 
